@@ -8,35 +8,16 @@ package edu.kit.informatik.neuralnet;
  */
 public class Neuron {
 
+  private int      position;
   private double   value;
-  public double   errorValue; // this is the value for backpropagation
-  public double[] weights;
+  private double   errorValue; // this is the value for backpropagation
+  public double[]  weights;
 
-  public Neuron[] upperLayer;
+  private Neuron[] upperLayer;
   private Neuron[] lowerLayer;
 
-  /**
-   * Lowest layer ( input layer ) constructor.
-   */
-  public Neuron() {
-    this.value = 1.0;
-    this.errorValue = 1.0;
-  }
-
-  /**
-   * Constructor for Neurons in the hidden and output layer.
-   * 
-   * @param lowerLayer
-   *          the layer beneath it
-   */
-  public Neuron(Neuron[] lowerLayer) {
-    this.value = 0.0;
-    this.weights = new double[lowerLayer.length];
-    for (int i = 0; i < lowerLayer.length; i++) {
-      this.weights[i] = Math.random();
-    }
-    this.lowerLayer = lowerLayer;
-    this.errorValue = 1.0;
+  public Neuron(int position) {
+    this.position = position;
   }
 
   /**
@@ -49,14 +30,30 @@ public class Neuron {
   }
 
   /**
+   * Get the errValue.
+   * 
+   * @return the current error value of the neuron
+   */
+  public double getError() {
+    return this.errorValue;
+  }
+
+  /**
+   * Set the errValue.
+   * 
+   * @return the error value of the neuron
+   */
+  public void setError(double errorValue) {
+    this.errorValue = errorValue;
+  }
+
+  /**
    * Set the value if it's in [0,1].
    * 
    * @param value
    *          the value to be set
    */
   public void setValue(double value) {
-    if (value > 1 || value < 0)
-      return;
     this.value = value;
   }
 
@@ -68,6 +65,20 @@ public class Neuron {
    */
   public void setUpperLayer(Neuron[] layer) {
     this.upperLayer = layer;
+  }
+
+  /**
+   * Set the lowerLayer and creating the correct weights array.
+   * 
+   * @param layer
+   *          the value to be set
+   */
+  public void setLowerLayer(Neuron[] layer) {
+    this.lowerLayer = layer;
+    this.weights = new double[layer.length];
+    for (int i = 0; i < lowerLayer.length; i++) {
+      this.weights[i] = Math.random();
+    }
   }
 
   /**
@@ -83,6 +94,26 @@ public class Neuron {
   }
 
   /**
+   * Calculating and updating the derivate of the error with respsect to this
+   * neuron.
+   */
+  public void updateError() {
+    if (upperLayer == null)
+      return;
+
+    double error = 0.0;
+
+    // calculate derivate of error based on this neuron
+    for (int i = 0; i < this.upperLayer.length; i++) {
+      error += Neuron.dSig(this.upperLayer[i].getValue()) * this.upperLayer[i].weights[position]
+          * this.upperLayer[i].errorValue;
+    }
+
+    // update error value for more efficient recursion
+    this.errorValue = error;
+  }
+
+  /**
    * Sigmoid function to normalize.
    * 
    * @param value
@@ -93,10 +124,24 @@ public class Neuron {
     return 1 / (1 + Math.pow(Math.E, -value));
   }
 
+  /**
+   * Actual derivate of sigmoid function.
+   * 
+   * @param value
+   *          actual value
+   * @return derivate of sigmoid of value
+   */
   protected static double dSigmoid(double value) {
     return sigmoid(value) * (1 - sigmoid(value));
   }
-  
+
+  /**
+   * Derivate of sigmoid given input is sigmoid(value)
+   * 
+   * @param value
+   *          sigmoid(value) of value
+   * @return derivative of sigmoid
+   */
   protected static double dSig(double value) {
     return value * (1 - value);
   }

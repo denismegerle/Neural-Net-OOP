@@ -2,16 +2,31 @@ package edu.kit.informatik.neuralnet;
 
 import java.util.ArrayList;
 
+/**
+ * A Neural Net.
+ * 
+ * @author 男子, >Denis
+ *
+ */
 public class NeuralNet {
 
   public ArrayList<Neuron[]> neuronLayers;
 
   public Neuron[]            inputLayer;
   public Neuron[]            outputLayer;
-  
-  private double learningRate = 0.2;
 
-  public NeuralNet(int[] layerSizes, double learningRate) {    
+  private double             learningRate;
+
+  /**
+   * Create a neural net with learning rate and given layers.
+   * 
+   * @param layerSizes
+   *          array countaining amount of neurons per layer (1 layer = 1 array
+   *          entry)
+   * @param learningRate
+   *          learning rate
+   */
+  public NeuralNet(int[] layerSizes, double learningRate) {
     // Error handling illegal inputs
     if (learningRate < 0 || learningRate > 1)
       throw new IllegalArgumentException("learning rate must stay between 0 and 1");
@@ -23,31 +38,30 @@ public class NeuralNet {
     }
 
     this.learningRate = learningRate;
-    
+
     neuronLayers = new ArrayList<Neuron[]>();
 
-    // initalizing input layer
-    inputLayer = new Neuron[layerSizes[0]];
-    for (int i = 0; i < layerSizes[0]; i++) {
-      inputLayer[i] = new Neuron();
-    }
-    neuronLayers.add(inputLayer);
-
-    // initializing hidden/output layers
-    for (int i = 1; i < layerSizes.length; i++) {
+    // initializing layers
+    for (int i = 0; i < layerSizes.length; i++) {
       Neuron[] neurons = new Neuron[layerSizes[i]];
       for (int j = 0; j < layerSizes[i]; j++)
-        neurons[j] = new Neuron(neuronLayers.get(i - 1));
+        neurons[j] = new Neuron(j);
       neuronLayers.add(neurons);
     }
-    
-    outputLayer = this.neuronLayers.get(neuronLayers.size() - 1);
-    
-    // add upper layer for each neuron
-    for (int i = 0; i < layerSizes.length - 1; i++) {
-      for (Neuron n : neuronLayers.get(i))
-        n.setUpperLayer(neuronLayers.get(i + 1));
+
+    // adding connections to neurons
+    for (int i = 0; i < layerSizes.length; i++) {
+      for (Neuron n : this.neuronLayers.get(i)) {
+        if (i != 0)
+          n.setLowerLayer(this.neuronLayers.get(i - 1));
+        if (i != layerSizes.length - 1)
+          n.setUpperLayer(this.neuronLayers.get(i + 1));
+      }
     }
+
+    // for convenience ...
+    inputLayer = this.neuronLayers.get(0);
+    outputLayer = this.neuronLayers.get(neuronLayers.size() - 1);
   }
 
   /**
@@ -61,89 +75,110 @@ public class NeuralNet {
       neuron.processLowerLayer();
   }
 
+  /**
+   * Processing the input completely to the output once.
+   */
   public void process() {
     for (int i = 1; i < neuronLayers.size(); i++)
       processLayer(neuronLayers.get(i));
   }
 
-  public void process(int steps) {
-    for (int i = 0; i < steps; i++)
-      this.process();
-  }
-  
-  public void train(double[][] input, double[][] expected) {
-    // train with dataset
-  }
-  
+  /**
+   * Updates the input layer with given values.
+   * 
+   * @param input
+   *          the input, has to be the same then input layer size
+   */
   public void updateInput(double[] input) {
+    if (this.inputLayer.length != input.length)
+      throw new IllegalArgumentException("input layer length not matched with training data");
     for (int i = 0; i < input.length; i++)
       this.inputLayer[i].setValue(input[i]);
   }
-  
-  //train with one data point
+
+  /**
+   * Train the net through backpropagation with one data set.
+   * 
+   * @param input
+   *          the input, match with input layer
+   * @param expected
+   *          expected output, match with output layer
+   */
   public void train(double[] input, double[] expected) {
     // process the input
     if (this.inputLayer.length != input.length)
       return;
-    updateInput(input);
+    this.updateInput(input);
     this.process();
-    
+
     // error array
     if (expected.length != this.outputLayer.length)
       return;
     for (int i = 0; i < expected.length; i++)
-      outputLayer[i].errorValue = this.outputLayer[i].getValue() - expected[i];
-    
-    // backpropagate node error
+      outputLayer[i].setError(this.outputLayer[i].getValue() - expected[i]);
+
+    // backpropagate neuron error
     for (int i = neuronLayers.size() - 2; i >= 0; i--) {
       for (int j = 0; j < neuronLayers.get(i).length; j++) {
-        nodeError(i, j);
+        this.neuronLayers.get(i)[j].updateError();
       }
     }
-    
+
     // compute error on edges
     // over all layers
     for (int i = 1; i < neuronLayers.size(); i++) {
       // over all neurons
       for (int j = 0; j < neuronLayers.get(i).length; j++) {
         Neuron currentNeuron = neuronLayers.get(i)[j];
-        double nodeSpecificError = currentNeuron.errorValue * Neuron.dSig(currentNeuron.getValue());
-     
+        double nodeSpecificError = currentNeuron.getError() * Neuron.dSig(currentNeuron.getValue());
+
         // over all edges
-        for (int k = 0; k < neuronLayers.get(i)[j].weights.length; k++) {
-          currentNeuron.weights[k] -= learningRate * nodeSpecificError * neuronLayers.get(i - 1)[k].getValue();
+        for (int k = 0; k < neuronLayers.get(i - 1).length; k++) {
+          currentNeuron.weights[k] -= learningRate * nodeSpecificError
+              * neuronLayers.get(i - 1)[k].getValue();
         }
       }
     }
   }
-  
+
   /**
-   * Calculating the derivate of the error with respsect to this node.
-   * Not usable with output nodes.
+   * Train with dataset.
    * 
-   * @return error value of the node
+   * @param input
+   *          dataset to be trained
+   * @param expected
+   *          expected values per dataset
    */
-  public double nodeError(int layer, int nodeNum) {
-    double error = 0.0;
-    
-    Neuron node = neuronLayers.get(layer)[nodeNum];
-    
-    for (int i = 0; i < node.upperLayer.length; i++) {
-      error += Neuron.dSig(node.upperLayer[i].getValue()) * node.upperLayer[i].weights[nodeNum] * node.upperLayer[i].errorValue;
+  public void train(double[][] input, double[][] expected) {
+    for (int i = 0; i < input.length; i++) {
+      this.train(input[i], expected[i]);
     }
-    
-    // update error value for more efficient recursion
-    node.errorValue = error;
-    
-    return error;
   }
 
+  /**
+   * Train with dataset a specific amount of iterations.
+   * 
+   * @param input
+   *          dataset to be trained
+   * @param expected
+   *          expected values per dataset
+   * @param iterations
+   *          how many iterations
+   */
+  public void train(double[][] input, double[][] expected, int iterations) {
+    for (int i = 0; i < iterations; i++) {
+      this.train(input, expected);
+    }
+  }
+
+  /**
+   * Testmethod...
+   */
   public static void main(String[] args) {
-    // TODO Auto-generated method stub
     NeuralNet net = new NeuralNet(new int[] { 2, 3, 9 }, 0.5);
-    
+
     for (int i = 0; i < 100000; i++) {
-      net.train(new double[] { 0, 1 }, new double[] { 1, 0, 0, 1, 1, 1, 1, 1, 1 });
+      net.train(new double[] { 0, 1 }, new double[] { 1, 0.5, 0, 1, 1, 1, 1, 1, 1 });
 
       System.out.println(net.outputLayer[0].getValue() + "..." + net.outputLayer[1].getValue());
     }
